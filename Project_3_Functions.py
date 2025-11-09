@@ -14,12 +14,12 @@ class Sphere: # Creating a sphere class. This makes it easier to handle the sphe
 
 
 def create_box(x, y, z): # This function simply creates a numpy array with the desired dimensions of the box.
-    
+
     return np.array([float(x), float(y), float(z)])
 
 
 def create_points(N, box): # This function creates N random points within the volume of the box. I let it be able to create several points, as this is usefull later.
-    
+
     points = []
 
     for i in range(N):
@@ -47,10 +47,10 @@ def inside_sphere(point, center, radius): # This function checks wether a point 
         return True
     else:
         return False # The function returns a True or False boolean.
-    
+
 
 def sort_points(points, center, radius): # A function to sort the inside and outside points in two different lists.
-    
+
     inside_points = []
     outside_points = []
 
@@ -67,10 +67,10 @@ def sort_points(points, center, radius): # A function to sort the inside and out
 
 def scatter_plot(inside_points, outside_points): # A function that handles all the plotting.
     ax = plt.figure().add_subplot(projection='3d')
-    
-    if len(inside_points) > 0: 
+
+    if len(inside_points) > 0:
         ax.scatter(inside_points[:,0], inside_points[:,1], inside_points[:,2], color='orange', label='Inside')
-    #if len(outside_points) > 0: 
+    #if len(outside_points) > 0:
     #    ax.scatter(outside_points[:,0], outside_points[:,1], outside_points[:,2], color='blue', label='Outside')
     # The blue outside points plotting has been turned of to better visualize the sphere of inside points.
 
@@ -79,7 +79,7 @@ def scatter_plot(inside_points, outside_points): # A function that handles all t
 
 
 def find_ratio(points, spheres): # Finding the ratio of inside points to total points, when you have several spheres in the box.
-    
+
     # Defining lists and initials:
     ratio = []
     inside_points = []
@@ -91,7 +91,7 @@ def find_ratio(points, spheres): # Finding the ratio of inside points to total p
         inside = False # Defaulting the boolean to False before checking the next point.
 
         for sphere in spheres: # Going through each sphere.
-            
+
             if inside_sphere(point, sphere.center, sphere.radius):
                 inside = True
                 break # If the point is inside a sphere, the loop ends and everything is tracked.
@@ -102,11 +102,11 @@ def find_ratio(points, spheres): # Finding the ratio of inside points to total p
 
         else:
             outside_points.append(point)
-        
+
         number_of_points_checked += 1 # Keeping track of how many points has been checked.
-        
+
         ratio.append(number_of_points_inside/number_of_points_checked) # 'ratio' is a list of all the ratio values over time.
-    
+
     x_values = np.linspace(0, number_of_points_checked, number_of_points_checked)
 
     return ratio, x_values, np.array(inside_points), np.array(outside_points)
@@ -123,7 +123,7 @@ def find_radius(element): # To find the radius based on the element symbol:
         radius = 170e-12
     elif element == 'P':
         radius = 180e-12
-    
+
     return radius
 
 class RandomWalker:
@@ -177,19 +177,19 @@ class RandomWalker:
             for _ in range(self.n_steps):
                 direction = np.random.randint(-1,2,3)
                 new_pos = pos + direction * self.step_size
-                
+
                 if np.any(new_pos < self.bounds_min) or np.any(new_pos > self.bounds_max):
                     continue
                 if collision(new_pos, self.atom_cords, self.atom_radii, self.walker_radius):
                     continue
-                
+
                 pos = new_pos
                 path.append(pos.copy())
-                
+
             paths.append(np.array(path))
-            
+
         return paths
-    
+
     def walk_fast(self, walkers):
         """
         Faster walking method that uses more or less the same method as the slower walker,
@@ -201,29 +201,29 @@ class RandomWalker:
         n = self.n_walkers
         steps = self.n_steps
         step_size = self.step_size
-        
+
         directions = np.random.randint(-1,2,(n, steps, 3))*step_size
-        
-        
+
+
         for i in range(n):
             pos = walkers[i].copy()
             path = [pos.copy()]
-            
+
             for step in directions[i]:
                 new_pos = pos + step
-                
+
                 if np.any(new_pos < self.bounds_min) or np.any(new_pos > self.bounds_max):
                     continue
 
                 if collision(new_pos, self.atom_cords, self.atom_radii, self.walker_radius):
                     continue
-                
+
                 pos = new_pos
                 path.append(pos.copy())
             paths.append(np.array(path))
-        
+
         return paths
-                
+
 
 
 def estimate_volume(n_walkers=100, n_steps=500,
@@ -239,9 +239,9 @@ def estimate_volume(n_walkers=100, n_steps=500,
     Returns paths, lower bounds, upper bounds, fraction of cells visited, 
     total amount of cells, amount of cells visited and the grid map itself.
     """
-    
+
     assert n_walkers > 0 and n_steps > 0, "Need more than 0 walkers and steps"
-    
+
     if use_dna_data:
         atom_cords, atom_radii = load_dna_data()
         bounds_min, bounds_max = calc_bounds(atom_cords, atom_radii)
@@ -250,15 +250,15 @@ def estimate_volume(n_walkers=100, n_steps=500,
         atom_radii = np.array(atom_radii, dtype=float)
         bounds_min = np.array(bounds_min, dtype=float)
         bounds_max = np.array(bounds_max, dtype=float)
-        
-    
+
+
     rw = RandomWalker(n_walkers, n_steps, bounds_min, bounds_max, step_size, walker_radius, atom_cords, atom_radii)
     walkers = rw.generate_walkers_fast()
-    
+
     for i in range(len(walkers)):
         while collision(walkers[i], atom_cords, atom_radii, walker_radius):
             walkers[i] = np.random.uniform(rw.bounds_min, rw.bounds_max)
-            
+
     paths = rw.walk(walkers)
 
     grid_map = create_grid_map(paths,bounds_min, bounds_max,1)
@@ -275,10 +275,10 @@ def collision(pos, atom_cords, atom_radii, walker_radius):
     smaller than the sum of any atoms radius and the walker radius.
     Returns true if it is the case(indicating a collision)
     """
-    
+
     if atom_cords is None or len(atom_cords) == 0:
         return False
-        
+
     distance = np.sqrt(np.sum((atom_cords - pos)**2,axis=1))
     return np.any((distance) < (atom_radii + walker_radius))
 
@@ -295,7 +295,7 @@ def create_grid_map(paths, bounds_min, bounds_max, cell_size=1):
     grid_shape = np.array(size / cell_size, dtype=int)
     grid_map = np.zeros(grid_shape)
 
-    
+
     for path in paths:
         for pos in path:
             i = int((pos[0] - bounds_min[0]) / cell_size)
@@ -304,7 +304,7 @@ def create_grid_map(paths, bounds_min, bounds_max, cell_size=1):
 
             if 0 <= i < grid_shape[0] and 0 <= j < grid_shape[1] and 0 <= k < grid_shape[2]:
                 grid_map[i, j, k] = 1
-    
+
     return grid_map
 
 
@@ -321,21 +321,21 @@ def load_dna_data(filename="dna_coords.txt"):
         "O": 1.52,
         "P": 1.8,
     }
-    
+
     coords = []
     radii = []
-    
+
     with open(filename, "r") as f:
         for line in f:
             atom = line.split()
             coords.append([atom[1],atom[2],atom[3]])
             radii.append(atom_radii[atom[0]])
-    
+
     f.close()
-    
+
     dna_coords = np.array(coords, dtype=float)
     dna_radii = np.array(radii, dtype=float)
-            
+
     return dna_coords, dna_radii
 
 def calc_bounds(atom_cords, atom_radii, walker_radius=1.0, margin=2.0):
@@ -344,7 +344,7 @@ def calc_bounds(atom_cords, atom_radii, walker_radius=1.0, margin=2.0):
     smalles value of x,y, and z of an atom(including its radius), a margin and the walker radius.
     Returns numpy arrays of lower bounds and upper bounds
     """
-    
+
     min_xyz = np.min(atom_cords - atom_radii[:, np.newaxis], axis=0)
     max_xyz = np.max(atom_cords + atom_radii[:, np.newaxis], axis=0)
     bounds_min = min_xyz - walker_radius - margin
@@ -365,12 +365,12 @@ def estimate_empty_space_test():
                 step_size=1.0,
                 walker_radius=1.0,
                 use_dna_data=False)
-    
-    
+
+
     print("Total amount of cells/volume in Angstroms: ", t)
     print("Amount of visited cells/volume in Angstroms: ", v)
     print("Fraction of cells visited: ", frac)
-    
+
     return plot_walks(paths, bounds_min, bounds_max)
 
 def estimate_sphere_test():
@@ -387,7 +387,7 @@ def estimate_sphere_test():
                     atom_cords=[[10.0,10.0,10.0]],
                     atom_radii=[5.0],
                     use_dna_data=False)
-    
+
     print("Total amount of cells/volume in Angstroms: ", t)
     print("Amount of visited cells/volume in Angstroms: ", v)
     print("Fraction of cells visited: ", frac)
@@ -397,14 +397,14 @@ def boundary_test():
     """
     Test function for checking if a walker ever exits bounds
     """
-    
+
     rw = RandomWalker(n_walkers=10, n_steps = 10, bounds_min=[0,0,0], bounds_max=[5,5,5])
     walkers = rw.generate_walkers_fast()
     paths = rw.walk(walkers)
-    
+
     for path in paths:
         assert np.all(path >= rw.bounds_min) and np.all(path <= rw.bounds_max), "Walker out of bounds"
-        
+
     return print("Walkers stayed within bounds")
 
 def plot_walks(paths, bounds_min, bounds_max):
@@ -412,10 +412,10 @@ def plot_walks(paths, bounds_min, bounds_max):
     3D plot of each walker path
     """
     ax = plt.figure().add_subplot(projection='3d')
-    
+
     for path in paths:
         ax.plot(path[:,0],path[:,1],path[:,2])
-    
+
     ax.set_xlim(bounds_min[0], bounds_max[0])
     ax.set_ylim(bounds_min[1], bounds_max[1])
     ax.set_zlim(bounds_min[2], bounds_max[2])
@@ -430,7 +430,7 @@ def plot_2d_projection(cells):
     Colours indicate the sum of visisted cells along said axis.
     """
     axis = ["X", "Y", "Z"]
-    
+
     for i in range(3):
         plt.figure()
         projection = np.sum(cells, axis=i)
