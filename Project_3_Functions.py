@@ -1,3 +1,7 @@
+"""
+Project 3 functions module
+"""
+
 import matplotlib.pyplot as plt
 import random as rng
 import numpy as np
@@ -121,3 +125,315 @@ def find_radius(element): # To find the radius based on the element symbol:
         radius = 180e-12
     
     return radius
+
+class RandomWalker:
+    """
+    Random walker class
+    """
+
+    def __init__(self, n_walkers=5, n_steps=10, bounds_min=[0,0,0], bounds_max = [10,10,10],
+                 step_size=1.0, walker_radius=1.0, atom_cords=[[0,0,0]], atom_radii=[0]):
+
+        self.n_walkers = n_walkers
+        self.n_steps = n_steps
+        self.bounds_min = np.array(bounds_min)
+        self.bounds_max = np.array(bounds_max)
+        self.step_size = step_size
+        self.walker_radius = walker_radius
+        self.atom_cords = np.array(atom_cords)
+        self.atom_radii = np.array(atom_radii)
+
+    def generate_walkers(self):
+        """
+        generates walkers slowly,
+        returns list of starting positions 
+        uniformly distributed in the given bounds
+        """
+        walkers = []
+        for _ in range(self.n_walkers):
+            pos = np.random.uniform(self.bounds_min, self.bounds_max)
+            walkers.append(pos)
+        return walkers
+
+    def generate_walkers_fast(self):
+        """
+        Generates walkers fast(er),
+        vectorized version that generates an array with shape (n_walkers, 3)
+        of uniformly distributed starting coordinates
+        """
+        return np.random.uniform(self.bounds_min, self.bounds_max,(self.n_walkers, 3))
+
+    def walk(self, walkers):
+        """
+        Slower walking method, iterates over starting positions of walkers,
+        then walks for each walker in random directions. 
+        Checks for collisions with objects in the space,
+        and enforces the boundaries of the space.
+        returns list of np arrays containing path taken by walker
+        """
+        paths = []
+        for pos in walkers:
+            path = [pos.copy()]
+            for _ in range(self.n_steps):
+                direction = np.random.randint(-1,2,3)
+                new_pos = pos + direction * self.step_size
+                
+                if np.any(new_pos < self.bounds_min) or np.any(new_pos > self.bounds_max):
+                    continue
+                if collision(new_pos, self.atom_cords, self.atom_radii, self.walker_radius):
+                    continue
+                
+                pos = new_pos
+                path.append(pos.copy())
+                
+            paths.append(np.array(path))
+            
+        return paths
+    
+    def walk_fast(self, walkers):
+        """
+        Faster walking method that uses more or less the same method as the slower walker,
+        except we generate an array of (n_walkers, n_steps, 3) shape holds directional
+        choices for each walker before the loop instead of doing it inside the for loop,
+        cutting down the amount of randint calls we do drastically from n_steps*n_walkers to 1.
+        """
+        paths = []
+        n = self.n_walkers
+        steps = self.n_steps
+        step_size = self.step_size
+        
+        directions = np.random.randint(-1,2,(n, steps, 3))*step_size
+        
+        
+        for i in range(n):
+            pos = walkers[i].copy()
+            path = [pos.copy()]
+            
+            for step in directions[i]:
+                new_pos = pos + step
+                
+                if np.any(new_pos < self.bounds_min) or np.any(new_pos > self.bounds_max):
+                    continue
+
+                if collision(new_pos, self.atom_cords, self.atom_radii, self.walker_radius):
+                    continue
+                
+                pos = new_pos
+                path.append(pos.copy())
+            paths.append(np.array(path))
+        
+        return paths
+                
+
+
+def estimate_volume(n_walkers=100, n_steps=500,
+                    bounds_min=[0,0,0], bounds_max = [20,20,20],
+                    step_size=1.0, walker_radius=1.0,
+                    atom_cords=[[0,0,0]], atom_radii=[0], use_dna_data = True):
+    """
+    Main function that handles the logic and function calls. Calls helper functions for loading dna data and calculating bounds for dna if we use_dna_data = True.
+    Makes calls to create RandomWalker class object, generates walkers(fast),
+    runs the walks, creates cell grid.
+    It also resamples starting position of a walker if it starts inside an object
+    and finally calculates the total amount of cells, cells visited and the fraction of cells visited.
+    Returns paths, lower bounds, upper bounds, fraction of cells visited, 
+    total amount of cells, amount of cells visited and the grid map itself.
+    """
+    
+    assert n_walkers > 0 and n_steps > 0, "Need more than 0 walkers and steps"
+    
+    if use_dna_data:
+        atom_cords, atom_radii = load_dna_data()
+        bounds_min, bounds_max = calc_bounds(atom_cords, atom_radii)
+    else:
+        atom_cords = np.array(atom_cords, dtype=float)
+        atom_radii = np.array(atom_radii, dtype=float)
+        bounds_min = np.array(bounds_min, dtype=float)
+        bounds_max = np.array(bounds_max, dtype=float)
+        
+    
+    rw = RandomWalker(n_walkers, n_steps, bounds_min, bounds_max, step_size, walker_radius, atom_cords, atom_radii)
+    walkers = rw.generate_walkers_fast()
+    
+    for i in range(len(walkers)):
+        while collision(walkers[i], atom_cords, atom_radii, walker_radius):
+            walkers[i] = np.random.uniform(rw.bounds_min, rw.bounds_max)
+            
+    paths = rw.walk(walkers)
+
+    grid_map = create_grid_map(paths,bounds_min, bounds_max,1)
+    t_cells = grid_map.size
+    v_cells = np.sum(grid_map)
+    frac = v_cells/t_cells
+
+    return paths, bounds_min, bounds_max, frac, v_cells, t_cells, grid_map
+
+def collision(pos, atom_cords, atom_radii, walker_radius):
+    """
+    Creates an array of vectors from the walkers position to all atom coordinates
+    and checks if any of the distances are
+    smaller than the sum of any atoms radius and the walker radius.
+    Returns true if it is the case(indicating a collision)
+    """
+    
+    if atom_cords is None or len(atom_cords) == 0:
+        return False
+        
+    distance = np.sqrt(np.sum((atom_cords - pos)**2,axis=1))
+    return np.any((distance) < (atom_radii + walker_radius))
+
+
+def create_grid_map(paths, bounds_min, bounds_max, cell_size=1):
+    """
+    Creates a 3D bit map based on the size of the given space and cell sizes to represent visisted and unvisited cells.
+    Iterates over each path of the walkers and converts the positions into cell coordinates.
+    Any cell that a walker has pathed through is considered clear since a collision would skip the coordinate.
+    Checks if any path exits bounds, if not marks cell as visited. 
+    Returns numpy array of visited(1) and unvisited(0) cells
+    """
+    size = bounds_max - bounds_min
+    grid_shape = np.array(size / cell_size, dtype=int)
+    grid_map = np.zeros(grid_shape)
+
+    
+    for path in paths:
+        for pos in path:
+            i = int((pos[0] - bounds_min[0]) / cell_size)
+            j = int((pos[1] - bounds_min[1]) / cell_size)
+            k = int((pos[2] - bounds_min[2]) / cell_size)
+
+            if 0 <= i < grid_shape[0] and 0 <= j < grid_shape[1] and 0 <= k < grid_shape[2]:
+                grid_map[i, j, k] = 1
+    
+    return grid_map
+
+
+def load_dna_data(filename="dna_coords.txt"):
+    """
+    Loads DNA data from the given file(dna_coords.txt by default)
+    and pairs the given atom with the atomic radius of the corresponding atom.
+    Returns two numpy arrays with corresponding coordinates and radii in angstroms(1e^-10m)
+    """
+    atom_radii = {
+        "H": 1.2,
+        "C": 1.7,
+        "N": 1.55,
+        "O": 1.52,
+        "P": 1.8,
+    }
+    
+    coords = []
+    radii = []
+    
+    with open(filename, "r") as f:
+        for line in f:
+            atom = line.split()
+            coords.append([atom[1],atom[2],atom[3]])
+            radii.append(atom_radii[atom[0]])
+    
+    f.close()
+    
+    dna_coords = np.array(coords, dtype=float)
+    dna_radii = np.array(radii, dtype=float)
+            
+    return dna_coords, dna_radii
+
+def calc_bounds(atom_cords, atom_radii, walker_radius=1.0, margin=2.0):
+    """
+    Calculates bounds_min and bounds_max based on the largest and
+    smalles value of x,y, and z of an atom(including its radius), a margin and the walker radius.
+    Returns numpy arrays of lower bounds and upper bounds
+    """
+    
+    min_xyz = np.min(atom_cords - atom_radii[:, np.newaxis], axis=0)
+    max_xyz = np.max(atom_cords + atom_radii[:, np.newaxis], axis=0)
+    bounds_min = min_xyz - walker_radius - margin
+    bounds_max = max_xyz + walker_radius + margin
+
+    return bounds_min, bounds_max
+
+def estimate_empty_space_test():
+    """
+    Estimates volume of an empty space as the simplest form of testing functionality, accuracy and parameters.
+    Returns plot of walker paths in 3D space
+    """
+    paths, bounds_min, bounds_max, frac, v, t, _ = estimate_volume(
+                n_walkers=100,
+                n_steps=800,
+                bounds_min=[0,0,0],
+                bounds_max = [20,20,20],
+                step_size=1.0,
+                walker_radius=1.0,
+                use_dna_data=False)
+    
+    
+    print("Total amount of cells/volume in Angstroms: ", t)
+    print("Amount of visited cells/volume in Angstroms: ", v)
+    print("Fraction of cells visited: ", frac)
+    
+    return plot_walks(paths, bounds_min, bounds_max)
+
+def estimate_sphere_test():
+    """
+    Estimates volume of a space with a single sphere in the middle for predictible results to measure accuracy based on parameters.
+    Returns a 2D projection for each axis.
+    """
+    _, _, _, frac, v, t, grid_map = estimate_volume(n_walkers=100,
+                    n_steps=800,
+                    bounds_min=[0,0,0],
+                    bounds_max = [20,20,20],
+                    step_size=1.0,
+                    walker_radius=1.0,
+                    atom_cords=[[10.0,10.0,10.0]],
+                    atom_radii=[5.0],
+                    use_dna_data=False)
+    
+    print("Total amount of cells/volume in Angstroms: ", t)
+    print("Amount of visited cells/volume in Angstroms: ", v)
+    print("Fraction of cells visited: ", frac)
+    return plot_2d_projection(grid_map)
+
+def boundary_test():
+    """
+    Test function for checking if a walker ever exits bounds
+    """
+    
+    rw = RandomWalker(n_walkers=10, n_steps = 10, bounds_min=[0,0,0], bounds_max=[5,5,5])
+    walkers = rw.generate_walkers_fast()
+    paths = rw.walk(walkers)
+    
+    for path in paths:
+        assert np.all(path >= rw.bounds_min) and np.all(path <= rw.bounds_max), "Walker out of bounds"
+        
+    return print("Walkers stayed within bounds")
+
+def plot_walks(paths, bounds_min, bounds_max):
+    """
+    3D plot of each walker path
+    """
+    ax = plt.figure().add_subplot(projection='3d')
+    
+    for path in paths:
+        ax.plot(path[:,0],path[:,1],path[:,2])
+    
+    ax.set_xlim(bounds_min[0], bounds_max[0])
+    ax.set_ylim(bounds_min[1], bounds_max[1])
+    ax.set_zlim(bounds_min[2], bounds_max[2])
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.show()
+
+def plot_2d_projection(cells):
+    """
+    Plotting function shows 2D projections of the spacial grid map along each axis.
+    Colours indicate the sum of visisted cells along said axis.
+    """
+    axis = ["X", "Y", "Z"]
+    
+    for i in range(3):
+        plt.figure()
+        projection = np.sum(cells, axis=i)
+        plt.imshow(projection)
+        plt.title("2D projection of visited cells along axis "+ axis[i])
+        plt.show()
