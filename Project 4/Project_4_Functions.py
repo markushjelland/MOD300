@@ -4,7 +4,12 @@ from astropy import units as u
 from mw_plot import MWFaceOn
 from mw_plot import MWSkyMap
 import numpy as np
-
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.regularizers import l2
+from ebola_data import t_g, O_g, t_l, O_l, t_s, O_s, ebola_model_plot
 
 def plot_faceon(x, y, r, title):
 
@@ -340,3 +345,91 @@ def kmeans_cluster_yellowness_and_plot(x_1, y_1, yell_1, x_2, y_2, yell_2, x_3, 
 
     if returns:
         return x_c0, y_c0, x_c1, y_c1, x_c2, y_c2
+    
+
+
+def linear_regression(t, O, country):
+
+    #Calculate cumulative outbreaks and reshape time values for sklearn
+    y = np.cumsum(O)
+    x = t.reshape(-1, 1)
+    
+    #Fit line to the data through linear regression
+    model= LinearRegression()
+    model.fit(x, y)
+    
+    #Predict the cumulative cases over the gime
+    y_pred = model.predict(x)
+    
+    plt.scatter(x, y, label="Cumulative data")
+    plt.plot(x, y_pred, color="red", label="Fitted line")
+    plt.title(f"Linear regression of cumulative Ebola cases in {country}")
+    plt.xlabel("Days since first outbreak")
+    plt.ylabel("Cumulative number of cases")
+    plt.legend()
+    plt.show()
+
+
+
+def polynomial_regression(t, O, country):
+    
+    #Calculate cumulative outbreaks and reshape time values for sklearn
+    y = np.cumsum(O)
+    x = np.array(t).reshape(-1, 1)
+    
+    
+    #Creating 3rd degree polynomial features for the curvilinear regression
+    poly = PolynomialFeatures(degree=3, include_bias=False)
+    x_poly = poly.fit_transform(x)
+    
+    
+    # Fit regression model with polynomial features
+    model = LinearRegression()
+    model.fit(x_poly, y)
+    
+    #Predict the cumulative cases over the gime
+    y_pred = model.predict(x_poly)
+
+    plt.scatter(t, y, label="Cumulative data")
+    plt.plot(t, y_pred, color="red", label=f"Polynomial")
+    plt.title(f"Polynomial regression of Ebola cases in {country}")
+    plt.xlabel("Days since first outbreak")
+    plt.ylabel("Cumulative number of cases")
+    plt.legend()
+    plt.show()
+
+def nn_pred(t, O, country):
+    
+    #Calculate cumulative outbreaks and reshape time values for sklearn
+    y = np.cumsum(O)
+    x = t.reshape(-1, 1)
+    
+    #Split set for 80% training data and 20% testing data retaining chronological order
+    split_index = int(0.8* len(x))
+    x_train, x_test = x[:split_index], x[split_index:]
+    y_train, y_test = y[:split_index], y[split_index:]
+    
+    # Define small neural network with L2 regularization to reduce overfittin on the small dataset
+    model = Sequential([
+        Dense(64, activation="relu", input_dim=1, kernel_regularizer=l2(0.01)),
+        Dense(64, activation="relu", kernel_regularizer=l2(0.01)),
+        Dense(1)])
+    
+    #Compiling the model using mean squared error and Adam optimizer
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    
+    #Training network on the training data
+    model.fit(x_train, y_train, epochs=200, verbose=0)
+    
+    #Prediction of cumulative cases on the test portion of the data
+    y_pred = model.predict(x_test)
+    
+    plt.scatter(t, y, label='Cumulative data')
+    plt.plot(t[split_index:], y_pred, color='red', label='NN prediction')
+    plt.title(f"Neural network regression of Ebola cases in {country}")
+    plt.xlabel("Days since first outbreak")
+    plt.ylabel("Cumulative number of cases")
+    plt.legend()
+    plt.show()
+    
+    
